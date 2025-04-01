@@ -42,19 +42,40 @@
                 }
             });
 
-            input.addEventListener('keydown', function (e) {
-                const isNumber = /^\d+$/.test(String(e.key));
-                const isAllowedKey = e.key === '.' || e.key === ',' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab';
-                const isPasteShortcut = e.ctrlKey && e.key === 'v'; // Allow Ctrl+V
+            input.addEventListener('input', function (e) {
+                // First replace commas with periods for consistent parsing
+                this.value = this.value.replace(/,/g, '.');
 
-                if (!isNumber && !isAllowedKey && !isPasteShortcut) {
-                    if (e.key === 'Enter') {
-                        calculateResults(); // Handle Enter key
-                    } else {
-                        e.preventDefault(); // Block invalid keys
-                    }
+                // Then remove any remaining invalid characters
+                this.value = this.value.replace(/[^0-9.]/g, '');
+
+                // Ensure only one decimal point
+                const parts = this.value.split('.');
+                if (parts.length > 2) {
+                    this.value = parts[0] + '.' + parts.slice(1).join('');
                 }
             });
+
+            // Keep keydown only for Enter key submission
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    calculateResults();
+                }
+            });
+
+            // input.addEventListener('keydown', function (e) {
+            //     const isNumber = /^\d+$/.test(String(e.key));
+            //     const isAllowedKey = e.key === '.' || e.key === ',' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab';
+            //     const isPasteShortcut = e.ctrlKey && e.key === 'v'; // Allow Ctrl+V
+
+            //     if (!isNumber && !isAllowedKey && !isPasteShortcut) {
+            //         if (e.key === 'Enter') {
+            //             calculateResults(); // Handle Enter key
+            //         } else {
+            //             e.preventDefault(); // Block invalid keys
+            //         }
+            //     }
+            // });
 
             function calculateResults() {
                 const totalAmount = Number(input.value.replace(',', '.'));
