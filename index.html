@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <!-- <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" /> -->
+        <!-- <meta name="viewport" content="width=device-width, minimal-ui, viewport-fit=cover, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" /> -->
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!-- <link rel="icon" type="image/png" href="assets/favicon.png" /> -->
+
+        <title>Kwota wejściowa na banknoty</title>
+        <!-- <link href="assets/main.css" rel="stylesheet" /> -->
+    </head>
+    <body>
+        <div class="Info">Kwota wejściowa:</div>
+        <main>
+            <input placeholder="Wprowadź kwotę" type="text" id="mainInput" />
+            <button id="mainButton">Oblicz</button>
+            <div id="mainError"></div>
+            <div id="mainDisplay"></div>
+        </main>
+        <script type="module">
+            const input = document.getElementById('mainInput');
+            const error = document.getElementById('mainError');
+            const button = document.getElementById('mainButton');
+
+            button.addEventListener('click', () => {
+                calculateResults();
+            });
+
+            input.addEventListener('paste', async (e) => {
+                let pasteData;
+                try {
+                    pasteData = e.clipboardData?.getData('text') || (await navigator.clipboard?.readText());
+                } catch (err) {
+                    error.innerText = 'Nie można wkleić (błąd iOS)';
+                    e.preventDefault();
+                    return;
+                }
+                if (!/^-?\d*[,.]?\d*$/.test(pasteData)) {
+                    error.innerText = 'Błąd: Proszę wkleić wartość numeryczną';
+                    e.preventDefault();
+                }
+            });
+
+            input.addEventListener('keydown', function (e) {
+                const isNumber = /^\d+$/.test(String(e.key));
+                const isAllowedKey = e.key === '.' || e.key === ',' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab';
+                const isPasteShortcut = e.ctrlKey && e.key === 'v'; // Allow Ctrl+V
+
+                if (!isNumber && !isAllowedKey && !isPasteShortcut) {
+                    if (e.key === 'Enter') {
+                        calculateResults(); // Handle Enter key
+                    } else {
+                        e.preventDefault(); // Block invalid keys
+                    }
+                }
+            });
+
+            function calculateResults() {
+                const totalAmount = Number(input.value.replace(',', '.'));
+
+                if (totalAmount <= 0) {
+                    error.innerText = 'Niepoprawna wartość';
+                    return;
+                } else {
+                    error.innerText = '';
+                }
+
+                const { billCounts, zlotyCoinCounts, groszeCoinCounts, remainingZloty, remainingGrosze } = splitAmount(totalAmount);
+                displayResults(totalAmount, billCounts, zlotyCoinCounts, groszeCoinCounts, remainingZloty, remainingGrosze);
+            }
+
+            function splitAmount(totalAmount) {
+                // Separate złoty and grosze parts
+                const totalZloty = Math.floor(totalAmount);
+                const totalGrosze = Math.round((totalAmount - totalZloty) * 100);
+
+                // Bills available (in złoty)
+                const bills = [500, 200, 100, 50, 20, 10];
+                // Złoty coins (1, 2, 5 zł)
+                const zlotyCoins = [5, 2, 1];
+                // Grosze coins (in grosze)
+                const groszeCoins = [50, 20, 10, 5, 2, 1];
+
+                // Initialize counts
+                const billCounts = {};
+                const zlotyCoinCounts = {};
+                const groszeCoinCounts = {};
+
+                bills.forEach((bill) => (billCounts[bill] = 0));
+                zlotyCoins.forEach((coin) => (zlotyCoinCounts[coin] = 0));
+                groszeCoins.forEach((coin) => (groszeCoinCounts[coin] = 0));
+
+                // Step 1: Handle 500zł bills - dynamic limit
+                let maxPossible500 = Math.floor(totalZloty / 500);
+                let max500;
+                if (totalAmount >= 4000) {
+                    // Only cap at 4 if amount is 4000zł or more
+                    max500 = Math.min(4, maxPossible500);
+                } else {
+                    // For smaller amounts, limit to 50% of total
+                    max500 = Math.min(maxPossible500, Math.floor(totalZloty * 0.5) / 500);
+                }
+
+                const count500 = max500 > 0 ? Math.floor(Math.random() * (max500 + 1)) : 0;
+                billCounts[500] = count500;
+                let remaining = totalZloty - 500 * count500;
+
+                // Step 2: Allocate 50-65% of remaining to 100zł bills
+                const target100 = remaining * (0.5 + Math.random() * 0.15);
+                const count100 = Math.floor(target100 / 100);
+                billCounts[100] = count100;
+                remaining -= 100 * count100;
+
+                // Step 3: Allocate 20-30% of original remaining to 200zł bills
+                const originalRemaining = remaining + 100 * count100;
+                const target200 = originalRemaining * (0.2 + Math.random() * 0.1);
+                const count200 = Math.floor(target200 / 200);
+                billCounts[200] = count200;
+                remaining -= 200 * count200;
+
+                // Step 4: Distribute the rest among smaller bills and złoty coins
+                const smallBills = [50, 20, 10];
+                const billWeights = [0.3, 0.4, 0.3];
+
+                while (remaining > 0 && smallBills.length > 0) {
+                    // Weighted random selection
+                    const rand = Math.random();
+                    let cumulativeWeight = 0;
+                    let selectedIndex = 0;
+
+                    for (let i = 0; i < smallBills.length; i++) {
+                        cumulativeWeight += billWeights[i];
+                        if (rand <= cumulativeWeight) {
+                            selectedIndex = i;
+                            break;
+                        }
+                    }
+
+                    const bill = smallBills[selectedIndex];
+                    if (bill <= remaining) {
+                        billCounts[bill] += 1;
+                        remaining -= bill;
+                    } else {
+                        smallBills.splice(selectedIndex, 1);
+                        billWeights.splice(selectedIndex, 1);
+                    }
+                }
+
+                // Then distribute remaining to złoty coins (5, 2, 1)
+                if (remaining > 0) {
+                    for (const coin of zlotyCoins) {
+                        if (remaining >= coin) {
+                            let count = Math.floor(remaining / coin);
+                            if (Math.random() < 0.3 && count > 1) {
+                                count = Math.floor(Math.random() * (count - 1)) + 1;
+                            }
+                            zlotyCoinCounts[coin] = count;
+                            remaining -= coin * count;
+                        }
+                    }
+                }
+
+                // Step 5: Distribute ALL grosze completely
+                let remainingGrosze = totalGrosze;
+                if (remainingGrosze > 0) {
+                    // Start with largest coins first to minimize coin count
+                    for (const coin of [...groszeCoins].sort((a, b) => b - a)) {
+                        if (remainingGrosze >= coin) {
+                            const count = Math.floor(remainingGrosze / coin);
+                            groszeCoinCounts[coin] = count;
+                            remainingGrosze -= coin * count;
+                            if (remainingGrosze === 0) {
+                                break;
+                            }
+                        }
+                    }
+
+                    // If there's any remaining (due to some edge case), use 1gr coins
+                    if (remainingGrosze > 0) {
+                        groszeCoinCounts[1] += remainingGrosze;
+                        remainingGrosze = 0;
+                    }
+                }
+
+                return {
+                    billCounts,
+                    zlotyCoinCounts,
+                    groszeCoinCounts,
+                    remainingZloty: remaining,
+                    remainingGrosze,
+                };
+            }
+
+            function displayResults(totalAmount, billCounts, zlotyCoinCounts, groszeCoinCounts, remainingZloty, remainingGrosze) {
+                const display = document.getElementById('mainDisplay');
+                display.innerText = `Kwota wejściowa: ${totalAmount.toFixed(2)} zł\n`;
+                display.innerText += '\nBanknoty:';
+
+                let totalBills = 0;
+                let totalBillsValue = 0;
+                Object.keys(billCounts)
+                    .sort((a, b) => b - a)
+                    .forEach((bill) => {
+                        const count = billCounts[bill];
+                        if (count > 0) {
+                            display.innerText += `\n${bill}zł: ${count} = ${bill * count}zł`;
+                            totalBills += count;
+                            totalBillsValue += bill * count;
+                        }
+                    });
+
+                display.innerText += '\n';
+                display.innerText += '\nMonety (zł):';
+                let totalZlotyCoins = 0;
+                let totalZlotyCoinsValue = 0;
+                Object.keys(zlotyCoinCounts)
+                    .sort((a, b) => b - a)
+                    .forEach((coin) => {
+                        const count = zlotyCoinCounts[coin];
+                        if (count > 0) {
+                            display.innerText += `\n${coin}zł: ${count} = ${coin * count}zł`;
+                            totalZlotyCoins += count;
+                            totalZlotyCoinsValue += coin * count;
+                        }
+                    });
+
+                display.innerText += '\n';
+                display.innerText += '\nMonety (gr):';
+                let totalGroszeCoins = 0;
+                let totalGroszeCoinsValue = 0;
+                Object.keys(groszeCoinCounts)
+                    .sort((a, b) => b - a)
+                    .forEach((coin) => {
+                        const count = groszeCoinCounts[coin];
+                        if (count > 0) {
+                            display.innerText += `\n${coin}gr: ${count} = ${((coin * count) / 100).toFixed(2)}zł`;
+                            totalGroszeCoins += count;
+                            totalGroszeCoinsValue += (coin * count) / 100;
+                        }
+                    });
+
+                display.innerText += '\n';
+                display.innerText += '\nPodsumowanie:';
+                display.innerText += `\nBanknoty: ${totalBills} banknotów o wartości ${totalBillsValue}zł`;
+                display.innerText += `\nMonety (zł): ${totalZlotyCoins} monet o wartości ${totalZlotyCoinsValue}zł`;
+                display.innerText += `\nMonety (gr): ${totalGroszeCoins} monet o wartości ${totalGroszeCoinsValue.toFixed(2)}zł`;
+
+                const calculatedTotal = totalBillsValue + totalZlotyCoinsValue + totalGroszeCoinsValue + remainingZloty + remainingGrosze / 100;
+                display.innerText += '\n';
+                display.innerText += `\nWeryfikacja: ${calculatedTotal.toFixed(2)} zł (powinno wynosić tyle samo co kwota wejściowa)`;
+                display.innerText += '\n';
+                display.innerText += '\nNie ponoszę odpowiedzialności za ewentualne problemy związane z działaniem tego programu. Proszę sprawdzać sumy ręcznie dla pewności.';
+            }
+        </script>
+    </body>
+</html>
